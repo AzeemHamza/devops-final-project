@@ -59,17 +59,3 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
 
-  deploy-to-aks:
-    needs: docker-build-push
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set Kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
-
-      - name: Deploy to AKS
-        run: |
-          kubectl apply -f k8s/
