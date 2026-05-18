@@ -1,8 +1,27 @@
-env:
-  - name: MONGO_URI
-    value: "mongodb://mongodb:27017/mydatabase"
-  - name: JWT_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: backend-secret
-        key: jwt-secret
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: hamza112azeem/backend:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MONGO_URI
+              value: "mongodb://mongodb:27017/mydatabase"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: jwt-secret
