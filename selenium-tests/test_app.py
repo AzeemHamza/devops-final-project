@@ -5,55 +5,41 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-URL = "http://localhost:3000"          # Change to AKS IP if testing cloud
-
-# ------------------------------------------------------------
-# Toggle this to False to see the Chrome window pop up
-# ------------------------------------------------------------
-HEADLESS = True
+URL = "http://localhost:3000"   # change to AKS IP if testing cloud
 
 # Generate unique credentials to avoid "user already exists"
 unique_id = int(time.time())
 USERNAME = f"testuser{unique_id}"
-EMAIL    = f"test{unique_id}@example.com"
+EMAIL = f"test{unique_id}@example.com"
 PASSWORD = "Test1234"
 
 def create_driver():
-    """Create a Chrome driver – headless or visible based on HEADLESS flag."""
     options = Options()
-    if HEADLESS:
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(options=options)
 
 def js_click(driver, element):
-    """Click an element using JavaScript (bypasses overlapping elements)."""
+    """Click an element using JavaScript, bypassing overlapping elements."""
     driver.execute_script("arguments[0].click();", element)
 
 def find_by_label(driver, label_text):
-    """Find a Material‑UI TextField input by its label text."""
     return driver.find_element(By.XPATH,
         f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//input"
     )
 
 def find_select_by_label(driver, label_text):
-    """Find a Material‑UI Select trigger by its label text."""
     return driver.find_element(By.XPATH,
         f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//div[contains(@class,'MuiInputBase-root')]"
     )
 
 def wait_for_label(driver, label_text, timeout=10):
-    """Wait for a Material‑UI TextField with the given label to appear, then return it."""
     return WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.XPATH,
             f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//input"
         ))
     )
-
-# -------------------------------------------------------------------
-# Test cases
-# -------------------------------------------------------------------
 
 def test_register_and_login():
     driver = create_driver()
@@ -65,6 +51,7 @@ def test_register_and_login():
         find_by_label(driver, "Password").send_keys(PASSWORD)
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
+        # Wait for dashboard (max 15 seconds, just in case)
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Your Tasks')]"))
         )
@@ -83,6 +70,7 @@ def test_register_and_login():
         logout_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Logout')]")
         js_click(driver, logout_btn)
 
+        # Wait for login page
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//h4[contains(text(),'Welcome Back')]"))
         )
