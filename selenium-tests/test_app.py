@@ -5,85 +5,181 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-URL = "http://localhost:3000"   # change to AKS IP for final run
+URL = "http://localhost:3000"          # Change to AKS IP if testing cloud
+
+# ------------------------------------------------------------
+# Toggle this to False to see the Chrome window pop up
+# ------------------------------------------------------------
+HEADLESS = True
+
+# Generate unique credentials to avoid "user already exists"
+unique_id = int(time.time())
+USERNAME = f"testuser{unique_id}"
+EMAIL    = f"test{unique_id}@example.com"
+PASSWORD = "Test1234"
 
 def create_driver():
+    """Create a Chrome driver – headless or visible based on HEADLESS flag."""
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    if HEADLESS:
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(options=options)
 
-def register_user(driver, username, email, password):
-    driver.get(f"{URL}/register")
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username"))).send_keys(username)
-    driver.find_element(By.NAME, "email").send_keys(email)
-    driver.find_element(By.NAME, "password").send_keys(password)
-    driver.find_element(By.XPATH, "//button[@type='submit']").click()
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//h5[contains(text(),'Add New Item')]")))
+def js_click(driver, element):
+    """Click an element using JavaScript (bypasses overlapping elements)."""
+    driver.execute_script("arguments[0].click();", element)
 
-def login_user(driver, email, password):
-    driver.get(f"{URL}/login")
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "email"))).send_keys(email)
-    driver.find_element(By.NAME, "password").send_keys(password)
-    driver.find_element(By.XPATH, "//button[@type='submit']").click()
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//h5[contains(text(),'Add New Item')]")))
+def find_by_label(driver, label_text):
+    """Find a Material‑UI TextField input by its label text."""
+    return driver.find_element(By.XPATH,
+        f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//input"
+    )
+
+def find_select_by_label(driver, label_text):
+    """Find a Material‑UI Select trigger by its label text."""
+    return driver.find_element(By.XPATH,
+        f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//div[contains(@class,'MuiInputBase-root')]"
+    )
+
+def wait_for_label(driver, label_text, timeout=10):
+    """Wait for a Material‑UI TextField with the given label to appear, then return it."""
+    return WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.XPATH,
+            f"//div[contains(@class,'MuiFormControl-root')][.//label[text()='{label_text}']]//input"
+        ))
+    )
+
+# -------------------------------------------------------------------
+# Test cases
+# -------------------------------------------------------------------
 
 def test_register_and_login():
     driver = create_driver()
     try:
-        register_user(driver, "testuser", "test@example.com", "Test1234")
-        # logout
-        driver.find_element(By.XPATH, "//button[contains(text(),'Logout')]").click()
-        WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Login')]")))
-        # login
-        login_user(driver, "test@example.com", "Test1234")
-        print("✅ Register and login work.")
+        # ---------- Register ----------
+        driver.get(f"{URL}/register")
+        wait_for_label(driver, "Username").send_keys(USERNAME)
+        find_by_label(driver, "Email").send_keys(EMAIL)
+        find_by_label(driver, "Password").send_keys(PASSWORD)
+        driver.find_element(By.XPATH, "//button[@type='submit']").click()
+
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Your Tasks')]"))
+        )
+        print("✅ Registration successful, dashboard loaded.")
+
+        # Wait for snackbar to disappear
+        try:
+            WebDriverWait(driver, 8).until_not(
+                EC.presence_of_element_located((By.CLASS_NAME, "notistack-MuiContent"))
+            )
+        except:
+            pass
+        time.sleep(0.5)
+
+        # ---------- Logout ----------
+        logout_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Logout')]")
+        js_click(driver, logout_btn)
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h4[contains(text(),'Welcome Back')]"))
+        )
+        print("✅ Logout successful.")
+
+        # ---------- Login ----------
+        find_by_label(driver, "Email").send_keys(EMAIL)
+        find_by_label(driver, "Password").send_keys(PASSWORD)
+        driver.find_element(By.XPATH, "//button[@type='submit']").click()
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Your Tasks')]"))
+        )
+        print("✅ Login successful.")
     finally:
         driver.quit()
 
 def test_add_and_toggle_item():
     driver = create_driver()
     try:
-        login_user(driver, "test@example.com", "Test1234")
-        # Add item with category and due date
-        name_input = driver.find_element(By.XPATH, "//input[@placeholder='Item name']")
-        name_input.send_keys("Test Item")
-        # select category
-        driver.find_element(By.XPATH, "//select").send_keys("Work")
-        # set due date
-        driver.find_element(By.XPATH, "//input[@type='date']").send_keys("2026-12-31")
-        driver.find_element(By.XPATH, "//button[contains(text(),'Add')]").click()
-        # Wait for card with "Test Item"
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//h5[contains(text(),'Test Item')]")))
+        # Login with the unique user
+        driver.get(f"{URL}/login")
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'MuiFormControl-root')][.//label[text()='Email']]//input"))
+        )
+        find_by_label(driver, "Email").send_keys(EMAIL)
+        find_by_label(driver, "Password").send_keys(PASSWORD)
+        driver.find_element(By.XPATH, "//button[@type='submit']").click()
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Your Tasks')]"))
+        )
+
+        # Add item
+        wait_for_label(driver, "New Task").send_keys("Selenium Task")
+        cat_select = find_select_by_label(driver, "Category")
+        cat_select.click()
+        WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH, "//li[@data-value='Work']"))
+        ).click()
+        driver.find_element(By.XPATH, "//input[@type='date']").send_keys("12/25/2026")
+        add_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Add')]")
+        js_click(driver, add_btn)
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h6[contains(text(),'Selenium Task')]"))
+        )
+        print("✅ Item added.")
+
         # Toggle checkbox
-        checkbox = driver.find_element(By.XPATH, "//h5[contains(text(),'Test Item')]/ancestor::div[contains(@class,'card-body')]//input[@type='checkbox']")
-        checkbox.click()
+        checkbox = driver.find_element(By.XPATH,
+            "//h6[contains(text(),'Selenium Task')]/ancestor::div[contains(@class,'MuiCard-root')]//input[@type='checkbox']"
+        )
+        js_click(driver, checkbox)
         time.sleep(1)
-        # Verify line-through style applied (optional check)
-        card_title = driver.find_element(By.XPATH, "//h5[contains(text(),'Test Item')]")
-        assert "text-decoration-line-through" in card_title.get_attribute("class")
-        print("✅ Add item and toggle complete work.")
+        assert checkbox.is_selected()
+        print("✅ Toggle completion works.")
     finally:
         driver.quit()
 
 def test_delete_item():
     driver = create_driver()
     try:
-        login_user(driver, "test@example.com", "Test1234")
-        # Delete the item we just created
-        delete_btn = driver.find_element(By.XPATH, "//h5[contains(text(),'Test Item')]/ancestor::div[contains(@class,'card-body')]//button[contains(text(),'🗑️')]")
-        delete_btn.click()
+        # Login
+        driver.get(f"{URL}/login")
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'MuiFormControl-root')][.//label[text()='Email']]//input"))
+        )
+        find_by_label(driver, "Email").send_keys(EMAIL)
+        find_by_label(driver, "Password").send_keys(PASSWORD)
+        driver.find_element(By.XPATH, "//button[@type='submit']").click()
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Your Tasks')]"))
+        )
+
+        # Wait for any lingering snackbar to disappear
+        try:
+            WebDriverWait(driver, 5).until_not(
+                EC.presence_of_element_located((By.CLASS_NAME, "notistack-MuiContent"))
+            )
+        except:
+            pass
+
+        # Delete the item
+        delete_btn = driver.find_element(By.XPATH,
+            "//h6[contains(text(),'Selenium Task')]/ancestor::div[contains(@class,'MuiCard-root')]//button[.//*[name()='svg' and @data-testid='DeleteIcon']]"
+        )
+        js_click(driver, delete_btn)
         time.sleep(1)
-        # Confirm item is gone
-        items = driver.find_elements(By.XPATH, "//h5[contains(text(),'Test Item')]")
+        items = driver.find_elements(By.XPATH, "//h6[contains(text(),'Selenium Task')]")
         assert len(items) == 0
         print("✅ Delete item works.")
     finally:
         driver.quit()
 
 if __name__ == "__main__":
-    print("Running enhanced auth-based tests...")
+    print("Running TaskFlow Pro tests...")
+    print(f"Using unique user: {USERNAME} / {EMAIL}")
     test_register_and_login()
     test_add_and_toggle_item()
     test_delete_item()
